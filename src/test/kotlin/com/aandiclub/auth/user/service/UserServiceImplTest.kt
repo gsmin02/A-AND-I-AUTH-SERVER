@@ -8,6 +8,7 @@ import com.aandiclub.auth.user.config.ProfileImageProperties
 import com.aandiclub.auth.user.config.ProfileProperties
 import com.aandiclub.auth.user.domain.UserEntity
 import com.aandiclub.auth.user.domain.UserRole
+import com.aandiclub.auth.user.domain.UserTrack
 import com.aandiclub.auth.user.event.UserProfileEventPublisher
 import com.aandiclub.auth.user.event.UserProfileUpdatedEvent
 import com.aandiclub.auth.user.repository.UserRepository
@@ -82,6 +83,8 @@ class UserServiceImplTest : FunSpec({
 				username = "user_01",
 				passwordHash = "hash",
 				role = UserRole.USER,
+				userTrack = UserTrack.SP,
+				publicCode = "#SP001",
 				nickname = "홍길동",
 				profileImageUrl = "https://images.aandiclub.com/users/user_01.png",
 				createdAt = Instant.now(),
@@ -91,7 +94,8 @@ class UserServiceImplTest : FunSpec({
 
 		StepVerifier.create(service.getMe(AuthenticatedUser(userId, "user_01", UserRole.USER)))
 			.assertNext { response ->
-				response.publicCode shouldBe "#NO001"
+				response.userTrack shouldBe UserTrack.SP
+				response.publicCode shouldBe "#SP001"
 				response.nickname shouldBe "홍길동"
 				response.profileImageUrl shouldBe "https://images.aandiclub.com/users/user_01.png"
 			}

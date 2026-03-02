@@ -196,6 +196,7 @@ class UserServiceImpl(
 			id = requireNotNull(entity.id),
 			username = entity.username,
 			role = entity.role,
+			userTrack = entity.userTrack,
 			publicCode = entity.publicCode,
 			nickname = entity.nickname,
 			profileImageUrl = entity.profileImageUrl,
