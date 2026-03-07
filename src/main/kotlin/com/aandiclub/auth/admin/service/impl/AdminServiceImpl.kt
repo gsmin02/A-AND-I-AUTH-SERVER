@@ -65,7 +65,6 @@ class AdminServiceImpl(
 		).flatMap { tuple ->
 			val username = "user_${tuple.t1.toString().padStart(2, '0')}"
 			val cohortOrder = tuple.t2.toInt()
-			// New accounts always start with NO track; track changes happen only via admin update flow.
 			val userTrack = userPublicCodeService.resolveTrack(request.role, null)
 			val publicCode = userPublicCodeService.generate(
 				role = request.role,
@@ -74,8 +73,22 @@ class AdminServiceImpl(
 				cohortOrder = cohortOrder,
 			)
 			when (request.provisionType) {
-				ProvisionType.PASSWORD -> createPasswordProvisionedUser(username, request, userTrack, cohortOrder, publicCode)
-				ProvisionType.INVITE -> createInviteProvisionedUser(username, request, userTrack, cohortOrder, publicCode)
+				ProvisionType.PASSWORD -> createPasswordProvisionedUser(
+					username = username,
+					role = request.role,
+					userTrack = userTrack,
+					cohort = request.cohort,
+					cohortOrder = cohortOrder,
+					publicCode = publicCode,
+				)
+				ProvisionType.INVITE -> createInviteProvisionedUser(
+					username = username,
+					role = request.role,
+					userTrack = userTrack,
+					cohort = request.cohort,
+					cohortOrder = cohortOrder,
+					publicCode = publicCode,
+				)
 			}
 		}
 
@@ -99,8 +112,6 @@ class AdminServiceImpl(
 	override fun updateUserRole(
 		targetUserId: UUID,
 		role: UserRole,
-		userTrack: UserTrack?,
-		cohort: Int?,
 		actorUserId: UUID,
 	): Mono<UpdateUserRoleResponse> {
 		if (targetUserId == actorUserId) {
@@ -264,7 +275,11 @@ class AdminServiceImpl(
 			if (recipientEmails.isEmpty()) {
 				return@defer Mono.error(AppException(ErrorCode.INVALID_REQUEST, "At least one email is required."))
 			}
-			val provisioningProfile = resolveProvisioningProfile(request.userTrack, request.cohort, request.cohortOrder)
+			val provisioningProfile = resolveInviteProvisioningProfile(
+				rawUserTrack = request.userTrack,
+				rawCohort = request.cohort,
+				rawCohortOrder = request.cohortOrder,
+			)
 
 			Flux.fromIterable(recipientEmails)
 				.concatMap { recipientEmail ->
@@ -273,11 +288,11 @@ class AdminServiceImpl(
 							val username = "user_${sequence.toString().padStart(2, '0')}"
 							createInviteProvisionedUser(
 								username = username,
-								request = CreateAdminUserRequest(
-									role = request.role,
-									provisionType = ProvisionType.INVITE,
-								),
-								provisioningProfile = provisioningProfile,
+								role = request.role,
+								userTrack = provisioningProfile.userTrack,
+								cohort = provisioningProfile.cohort,
+								cohortOrder = provisioningProfile.cohortOrder,
+								publicCode = username,
 							).flatMap { created ->
 								val inviteLink = created.inviteLink
 									?: return@flatMap Mono.error(
@@ -294,7 +309,7 @@ class AdminServiceImpl(
 										role = created.role,
 										inviteUrl = inviteLink,
 										expiresAt = expiresAt,
-										userTrack = created.userTrack,
+										userTrack = created.userTrack.name,
 										cohort = created.cohort,
 										cohortOrder = created.cohortOrder,
 										publicCode = created.publicCode,
@@ -305,7 +320,7 @@ class AdminServiceImpl(
 											username = created.username,
 											role = created.role,
 											inviteExpiresAt = expiresAt,
-											userTrack = created.userTrack,
+											userTrack = created.userTrack.name,
 											cohort = created.cohort,
 											cohortOrder = created.cohortOrder,
 											publicCode = created.publicCode,
@@ -333,8 +348,11 @@ class AdminServiceImpl(
 
 	private fun createPasswordProvisionedUser(
 		username: String,
-		request: CreateAdminUserRequest,
-		provisioningProfile: ProvisioningProfile,
+		role: UserRole,
+		userTrack: UserTrack,
+		cohort: Int,
+		cohortOrder: Int,
+		publicCode: String,
 	): Mono<CreateAdminUserResponse> {
 		val temporaryPassword = credentialGenerator.randomPassword(32)
 		val hashedPassword = passwordService.hash(temporaryPassword)
@@ -342,9 +360,9 @@ class AdminServiceImpl(
 			UserEntity(
 				username = username,
 				passwordHash = hashedPassword,
-				role = request.role,
+				role = role,
 				userTrack = userTrack,
-				cohort = request.cohort,
+				cohort = cohort,
 				cohortOrder = cohortOrder,
 				publicCode = publicCode,
 				forcePasswordChange = true,
@@ -377,8 +395,11 @@ class AdminServiceImpl(
 
 	private fun createInviteProvisionedUser(
 		username: String,
-		request: CreateAdminUserRequest,
-		provisioningProfile: ProvisioningProfile,
+		role: UserRole,
+		userTrack: UserTrack,
+		cohort: Int,
+		cohortOrder: Int,
+		publicCode: String,
 	): Mono<CreateAdminUserResponse> {
 		val rawInviteToken = credentialGenerator.randomToken()
 		val hashedInviteToken = tokenHashService.sha256Hex(rawInviteToken)
@@ -389,9 +410,9 @@ class AdminServiceImpl(
 			UserEntity(
 				username = username,
 				passwordHash = placeholderPasswordHash,
-				role = request.role,
+				role = role,
 				userTrack = userTrack,
-				cohort = request.cohort,
+				cohort = cohort,
 				cohortOrder = cohortOrder,
 				publicCode = publicCode,
 				forcePasswordChange = true,
@@ -436,21 +457,21 @@ class AdminServiceImpl(
 		}
 	}
 
-	private fun resolveProvisioningProfile(
+	private fun resolveInviteProvisioningProfile(
 		rawUserTrack: String?,
 		rawCohort: Int?,
 		rawCohortOrder: Int?,
-        rawPublicCode: String?,
-	): ProvisioningProfile {
-		val userTrack = rawUserTrack?.trim()?.uppercase()
+	): InviteProvisioningProfile {
+		val normalizedTrack = rawUserTrack?.trim()?.uppercase()
 			?.takeIf { it.isNotEmpty() }
 			?: DEFAULT_USER_TRACK
-		if (userTrack !in ALLOWED_USER_TRACKS) {
+		if (normalizedTrack !in ALLOWED_USER_TRACKS) {
 			throw AppException(
 				ErrorCode.INVALID_REQUEST,
 				"userTrack must be one of ${ALLOWED_USER_TRACKS.joinToString(", ")}.",
 			)
 		}
+		val userTrack = UserTrack.valueOf(normalizedTrack)
 
 		val cohort = rawCohort ?: 0
 		if (cohort < 0) {
@@ -462,19 +483,17 @@ class AdminServiceImpl(
 			throw AppException(ErrorCode.INVALID_REQUEST, "cohortOrder must be greater than or equal to 0.")
 		}
 
-		return ProvisioningProfile(
+		return InviteProvisioningProfile(
 			userTrack = userTrack,
 			cohort = cohort,
 			cohortOrder = cohortOrder,
-            publicCode = publicCode,
 		)
 	}
 
-	private data class ProvisioningProfile(
-		val userTrack: String,
+	private data class InviteProvisioningProfile(
+		val userTrack: UserTrack,
 		val cohort: Int,
 		val cohortOrder: Int,
-        val publicCode: String,
 	)
 
 	private fun toAdminUserSummary(user: UserEntity, now: java.time.Instant): Mono<AdminUserSummary> {

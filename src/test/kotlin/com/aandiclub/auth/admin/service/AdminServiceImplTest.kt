@@ -108,10 +108,10 @@ class AdminServiceImplTest : FunSpec({
 		savedEntitySlot.captured.username shouldBe "user_01"
 		savedEntitySlot.captured.passwordHash shouldBe "hashed-password"
 		savedEntitySlot.captured.forcePasswordChange shouldBe true
-		savedEntitySlot.captured.userTrack shouldBe "NO"
-		savedEntitySlot.captured.cohort shouldBe 0
-		savedEntitySlot.captured.cohortOrder shouldBe 0
-		savedEntitySlot.captured.publicCode shouldBe "user_01"
+		savedEntitySlot.captured.userTrack shouldBe UserTrack.NO
+		savedEntitySlot.captured.cohort shouldBe 4
+		savedEntitySlot.captured.cohortOrder shouldBe 1
+		savedEntitySlot.captured.publicCode shouldBe "#NO401"
 	}
 
 	test("createUser INVITE should return one-time invite link and inactive account") {
@@ -155,10 +155,10 @@ class AdminServiceImplTest : FunSpec({
 
 		savedUserSlot.captured.isActive shouldBe false
 		savedUserSlot.captured.forcePasswordChange shouldBe true
-		savedUserSlot.captured.userTrack shouldBe "NO"
-		savedUserSlot.captured.cohort shouldBe 0
-		savedUserSlot.captured.cohortOrder shouldBe 0
-		savedUserSlot.captured.publicCode shouldBe "user_02"
+		savedUserSlot.captured.userTrack shouldBe UserTrack.NO
+		savedUserSlot.captured.cohort shouldBe 4
+		savedUserSlot.captured.cohortOrder shouldBe 2
+		savedUserSlot.captured.publicCode shouldBe "#NO402"
 		inviteSlot.captured.userId shouldBe userId
 		inviteSlot.captured.tokenHash shouldBe "invite-hash"
 	}
@@ -289,8 +289,8 @@ class AdminServiceImplTest : FunSpec({
 					expiresAt = any(),
 					userTrack = "NO",
 					cohort = 0,
-					cohortOrder = 0,
-					publicCode = "user_03",
+					cohortOrder = 1,
+					publicCode = "#NO001",
 				)
 			} returns Mono.empty()
 
@@ -305,7 +305,7 @@ class AdminServiceImplTest : FunSpec({
 			.verifyComplete()
 
 		inviteSlot.captured.userId shouldBe userId
-		savedUserSlot.captured.userTrack shouldBe "NO"
+		savedUserSlot.captured.userTrack shouldBe UserTrack.NO
 		savedUserSlot.captured.cohort shouldBe 0
 		savedUserSlot.captured.cohortOrder shouldBe 0
 		savedUserSlot.captured.publicCode shouldBe "user_03"
@@ -372,7 +372,7 @@ class AdminServiceImplTest : FunSpec({
 			role = UserRole.USER,
 			forcePasswordChange = true,
 			isActive = false,
-			userTrack = "FL",
+			userTrack = UserTrack.FL,
 			cohort = 10,
 			cohortOrder = 3,
 			publicCode = "user_06",
@@ -411,7 +411,7 @@ class AdminServiceImplTest : FunSpec({
 
 		savedUserSlot.captured.cohort shouldBe 10
 		savedUserSlot.captured.cohortOrder shouldBe 3
-		savedUserSlot.captured.userTrack shouldBe "FL"
+		savedUserSlot.captured.userTrack shouldBe UserTrack.FL
 	}
 
 	test("sendInviteMail should reject unsupported userTrack") {
