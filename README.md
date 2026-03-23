@@ -36,6 +36,97 @@ docker compose up --build
 - `APP_PROFILE_IMAGE_KEY_PREFIX`(기본 `profiles`)
 - `APP_PROFILE_IMAGE_PUBLIC_BASE_URL`(선택, CloudFront 사용 시)
 
+## User CRUD Event
+현재 구현은 유저 변경 이벤트를 `UserCreated` / `UserUpdated` / `UserDeleted`로 분리하지 않고, 변경 후 최신 사용자 스냅샷을 담는 `UserProfileUpdated` 이벤트 하나로 발행합니다.
+
+CRUD별 발행 여부:
+- Create: 발행됨 (`AdminServiceImpl.createUser`, 비밀번호 생성/초대 생성 모두 포함)
+- Read: 발행되지 않음
+- Update: 발행됨 (`UserServiceImpl.updateProfile`, `AdminServiceImpl.updateUser`, `AdminServiceImpl.updateUserRole`)
+- Delete: 발행되지 않음 (`AdminServiceImpl.deleteUser`는 삭제 감사 로그만 남김)
+
+SNS 발행 형식:
+- Message body: 아래 JSON
+- Message attribute: `eventType=UserProfileUpdated`
+- FIFO Topic 사용 시:
+  - `MessageGroupId=${APP_USER_PROFILE_EVENT_FIFO_MESSAGE_GROUP_ID:user-profile-updated}`
+  - `MessageDeduplicationId=eventId`
+
+메시지 바디 스키마:
+```json
+{
+  "eventId": "uuid",
+  "type": "UserProfileUpdated",
+  "occurredAt": "2026-03-21T10:15:30Z",
+  "userId": "uuid",
+  "username": "user_01",
+  "role": "USER",
+  "userTrack": "NO",
+  "cohort": 4,
+  "cohortOrder": 1,
+  "publicCode": "#NO401",
+  "nickname": "andi",
+  "profileImageUrl": "https://images.aandiclub.com/profiles/user_01.png",
+  "version": 1
+}
+```
+
+필드 설명:
+- `eventId`: 이벤트 고유 ID (`UUID`)
+- `type`: 현재 항상 `UserProfileUpdated`
+- `occurredAt`: 사용자 레코드의 `updatedAt`
+- `userId`: 사용자 ID
+- `username`: 내부 username
+- `role`: `ADMIN`, `ORGANIZER`, `USER`
+- `userTrack`: `NO`, `FL`, `SP`
+- `cohort`, `cohortOrder`, `publicCode`: 사용자 공개 식별 정보 계산에 사용되는 값
+- `nickname`, `profileImageUrl`: 최신 프로필 값
+- `version`: `users.profile_version`
+
+CRUD 예시:
+
+Create 시 예시:
+```json
+{
+  "eventId": "9f4d1b9c-5dd4-4d05-93e4-53dc6740d9a3",
+  "type": "UserProfileUpdated",
+  "occurredAt": "2026-03-21T10:15:30Z",
+  "userId": "a6d3eb0d-5174-4aa9-8f87-e1f91228a9c8",
+  "username": "user_01",
+  "role": "USER",
+  "userTrack": "NO",
+  "cohort": 4,
+  "cohortOrder": 1,
+  "publicCode": "#NO401",
+  "nickname": null,
+  "profileImageUrl": null,
+  "version": 0
+}
+```
+
+Update 시 예시:
+```json
+{
+  "eventId": "3a3c6f82-4ec4-4f91-a57f-2b4d745c4b31",
+  "type": "UserProfileUpdated",
+  "occurredAt": "2026-03-21T10:18:44Z",
+  "userId": "a6d3eb0d-5174-4aa9-8f87-e1f91228a9c8",
+  "username": "user_01",
+  "role": "USER",
+  "userTrack": "NO",
+  "cohort": 4,
+  "cohortOrder": 1,
+  "publicCode": "#NO401",
+  "nickname": "andi",
+  "profileImageUrl": "https://images.aandiclub.com/profiles/user_01.png",
+  "version": 1
+}
+```
+
+Delete 시 예시:
+- 현재 삭제 이벤트는 발행하지 않습니다.
+- 필요하면 `UserDeleted` 같은 별도 이벤트 계약을 추가해야 합니다.
+
 ## CI/CD Workflow
 - CI (`.github/workflows/ci.yml`)
   - Trigger: `main` 브랜치 `push`, `pull_request`

@@ -47,6 +47,8 @@ out/
 
 ### Local tool state ###
 .omc/
+.omx/
+.gradle-local/
 
 # Local private docs
 secret_docs/
