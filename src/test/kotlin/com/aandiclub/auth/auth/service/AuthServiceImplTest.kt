@@ -252,7 +252,7 @@ class AuthServiceImplTest : FunSpec({
 		savedUserSlot.captured.forcePasswordChange shouldBe false
 	}
 
-	test("activate should normalize requested username to lowercase") {
+	test("activate should preserve requested username casing") {
 		val userId = UUID.randomUUID()
 		val invite = UserInviteEntity(
 			id = UUID.randomUUID(),
@@ -275,7 +275,7 @@ class AuthServiceImplTest : FunSpec({
 		every { tokenHashService.sha256Hex("invite-token") } returns "invite-hash"
 		every { userInviteRepository.findByTokenHash("invite-hash") } returns Mono.just(invite)
 		every { userRepository.findById(userId) } returns Mono.just(user)
-		every { userRepository.findByUsername("member_09") } returns Mono.empty()
+		every { userRepository.findByUsername("Member_09") } returns Mono.empty()
 		every { passwordService.hash("new-password-123") } returns "new-hash"
 		every { userRepository.save(capture(savedUserSlot)) } answers { Mono.just(firstArg()) }
 		every { userInviteRepository.save(any()) } answers { Mono.just(firstArg()) }
@@ -287,7 +287,7 @@ class AuthServiceImplTest : FunSpec({
 			}
 			.verifyComplete()
 
-		savedUserSlot.captured.username shouldBe "member_09"
+		savedUserSlot.captured.username shouldBe "Member_09"
 	}
 
 	test("activate should reject username change when requested username is already used") {

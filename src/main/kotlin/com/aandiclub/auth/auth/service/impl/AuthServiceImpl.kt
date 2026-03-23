@@ -29,7 +29,6 @@ import org.springframework.stereotype.Service
 import reactor.core.publisher.Mono
 import java.time.Clock
 import java.time.Duration
-import java.util.Locale
 
 @Service
 class AuthServiceImpl(
@@ -107,7 +106,7 @@ class AuthServiceImpl(
 					} else {
 						userRepository.findById(invite.userId)
 							.switchIfEmpty(Mono.error(AppException(ErrorCode.NOT_FOUND, "User not found.")))
-							.flatMap { user -> resolveActivateUsername(normalizeUsername(request.username), user) }
+							.flatMap { user -> resolveActivateUsername(request.username, user) }
 							.flatMap { activateUser ->
 								val updatedUser = activateUser.user.copy(
 									username = activateUser.username,
@@ -150,8 +149,6 @@ class AuthServiceImpl(
 			}
 			.switchIfEmpty(Mono.just(ActivateUser(user, requestedUsername)))
 	}
-
-	private fun normalizeUsername(username: String?): String? = username?.lowercase(Locale.ROOT)
 
 	private fun invalidCredentials(username: String): Mono<Nothing> {
 		securityTelemetry.loginFailed(username)
