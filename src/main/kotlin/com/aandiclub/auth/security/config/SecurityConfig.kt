@@ -3,9 +3,12 @@ package com.aandiclub.auth.security.config
 import com.aandiclub.auth.admin.config.BootstrapAdminProperties
 import com.aandiclub.auth.admin.config.InviteMailProperties
 import com.aandiclub.auth.admin.config.InviteProperties
+import com.aandiclub.auth.common.web.v2.V2HeaderValidationWebFilter
 import com.aandiclub.auth.security.auth.JwtReactiveAuthenticationManager
 import com.aandiclub.auth.security.filter.BearerTokenAuthenticationConverter
 import com.aandiclub.auth.security.jwt.JwtProperties
+import com.aandiclub.auth.security.web.V2AwareServerAccessDeniedHandler
+import com.aandiclub.auth.security.web.V2AwareServerAuthenticationEntryPoint
 import com.aandiclub.auth.user.config.ProfileImageProperties
 import com.aandiclub.auth.user.config.ProfileProperties
 import com.aandiclub.auth.user.config.UserProfileEventProperties
@@ -19,8 +22,6 @@ import org.springframework.security.config.web.server.SecurityWebFiltersOrder
 import org.springframework.security.config.web.server.ServerHttpSecurity
 import org.springframework.security.web.server.SecurityWebFilterChain
 import org.springframework.security.web.server.authentication.AuthenticationWebFilter
-import org.springframework.security.web.server.authentication.HttpStatusServerEntryPoint
-import org.springframework.security.web.server.authorization.HttpStatusServerAccessDeniedHandler
 import org.springframework.web.cors.CorsConfiguration
 import org.springframework.web.cors.reactive.CorsConfigurationSource
 import org.springframework.web.cors.reactive.CorsWebFilter
@@ -64,6 +65,9 @@ class SecurityConfig {
 		http: ServerHttpSecurity,
 		jwtReactiveAuthenticationManager: JwtReactiveAuthenticationManager,
 		corsConfigurationSource: CorsConfigurationSource,
+		v2HeaderValidationWebFilter: V2HeaderValidationWebFilter,
+		v2AwareServerAuthenticationEntryPoint: V2AwareServerAuthenticationEntryPoint,
+		v2AwareServerAccessDeniedHandler: V2AwareServerAccessDeniedHandler,
 	): SecurityWebFilterChain {
 		val jwtAuthenticationWebFilter = AuthenticationWebFilter(jwtReactiveAuthenticationManager).apply {
 			setServerAuthenticationConverter(BearerTokenAuthenticationConverter())
@@ -75,15 +79,18 @@ class SecurityConfig {
 			.formLogin { it.disable() }
 			.httpBasic { it.disable() }
 			.exceptionHandling {
-				it.authenticationEntryPoint(HttpStatusServerEntryPoint(HttpStatus.UNAUTHORIZED))
-				it.accessDeniedHandler(HttpStatusServerAccessDeniedHandler(HttpStatus.FORBIDDEN))
+				it.authenticationEntryPoint(v2AwareServerAuthenticationEntryPoint)
+				it.accessDeniedHandler(v2AwareServerAccessDeniedHandler)
 			}
 			.authorizeExchange {
 				it.pathMatchers(HttpMethod.OPTIONS, "/**").permitAll()
 				it.pathMatchers(
 					"/v1/auth/**",
+					"/api/v2/auth/**",
 					"/activate",
+					"/api/v2/activate",
 					"/api/ping/**",
+					"/api/v2/ping/**",
 					"/v3/api-docs/**",
 					"/swagger-ui.html",
 					"/swagger-ui/**",
@@ -91,10 +98,14 @@ class SecurityConfig {
 					"/actuator/info",
 				).permitAll()
 				it.pathMatchers("/v1/me", "/v1/me/**").hasAnyRole("USER", "ORGANIZER", "ADMIN")
+				it.pathMatchers("/api/v2/me", "/api/v2/me/**").hasAnyRole("USER", "ORGANIZER", "ADMIN")
 				it.pathMatchers(HttpMethod.GET, "/v1/users/lookup").hasAnyRole("ORGANIZER", "ADMIN")
+				it.pathMatchers(HttpMethod.GET, "/api/v2/users/lookup").hasAnyRole("ORGANIZER", "ADMIN")
 				it.pathMatchers("/v1/admin/**").hasRole("ADMIN")
+				it.pathMatchers("/api/v2/admin/**").hasRole("ADMIN")
 				it.anyExchange().authenticated()
 			}
+			.addFilterAt(v2HeaderValidationWebFilter, SecurityWebFiltersOrder.FIRST)
 			.addFilterAt(jwtAuthenticationWebFilter, SecurityWebFiltersOrder.AUTHENTICATION)
 			.build()
 	}

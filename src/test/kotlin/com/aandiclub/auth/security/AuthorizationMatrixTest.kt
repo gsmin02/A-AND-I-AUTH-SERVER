@@ -92,6 +92,31 @@ class AuthorizationMatrixTest : StringSpec() {
 				.expectStatus().isUnauthorized
 		}
 
+		"GET /api/v2/me requires v2 headers" {
+			webClient().get()
+				.uri("/api/v2/me")
+				.exchange()
+				.expectStatus().isBadRequest
+				.expectBody()
+				.jsonPath("$.success").isEqualTo(false)
+				.jsonPath("$.error.code").isEqualTo(33101)
+		}
+
+		"GET /api/v2/me requires Authenticate header when v2 headers are present" {
+			webClient().get()
+				.uri("/api/v2/me")
+				.headers { headers ->
+					headers.add("deviceOS", "IOS")
+					headers.add("timestamp", Instant.now().toString())
+				}
+				.exchange()
+				.expectStatus().isUnauthorized
+				.expectBody()
+				.jsonPath("$.success").isEqualTo(false)
+				.jsonPath("$.error.code").isEqualTo(31101)
+				.jsonPath("$.error.value").isEqualTo("UNAUTHORIZED")
+		}
+
 		"GET /v1/me allows USER role" {
 			val userId = UUID.randomUUID()
 			val username = "tester_user"
@@ -100,6 +125,26 @@ class AuthorizationMatrixTest : StringSpec() {
 			webClient().get()
 				.uri("/v1/me")
 				.headers { it.setBearerAuth(token) }
+				.exchange()
+				.expectStatus().isOk
+				.expectBody()
+				.jsonPath("$.success").isEqualTo(true)
+				.jsonPath("$.data.username").isEqualTo(username)
+				.jsonPath("$.data.role").isEqualTo("USER")
+		}
+
+		"GET /api/v2/me allows USER role with Authenticate header" {
+			val userId = UUID.randomUUID()
+			val username = "tester_user_v2"
+			insertUser(userId, username, UserRole.USER)
+			val token = accessToken(userId, username, UserRole.USER)
+			webClient().get()
+				.uri("/api/v2/me")
+				.headers {
+					it.add("Authenticate", "Bearer $token")
+					it.add("deviceOS", "IOS")
+					it.add("timestamp", Instant.now().toString())
+				}
 				.exchange()
 				.expectStatus().isOk
 				.expectBody()
@@ -221,6 +266,22 @@ class AuthorizationMatrixTest : StringSpec() {
 				.headers { it.setBearerAuth(token) }
 				.exchange()
 				.expectStatus().isForbidden
+		}
+
+		"GET /api/v2/admin/ping denies USER role with v2 error envelope" {
+			val token = accessToken(UUID.randomUUID(), "tester_user_denied_v2", UserRole.USER)
+			webClient().get()
+				.uri("/api/v2/admin/ping")
+				.headers {
+					it.add("Authenticate", "Bearer $token")
+					it.add("deviceOS", "IOS")
+					it.add("timestamp", Instant.now().toString())
+				}
+				.exchange()
+				.expectStatus().isForbidden
+				.expectBody()
+				.jsonPath("$.success").isEqualTo(false)
+				.jsonPath("$.error.code").isEqualTo(22101)
 		}
 
 		"GET /v1/users/lookup denies USER role" {
